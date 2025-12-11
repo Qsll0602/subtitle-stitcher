@@ -1,4 +1,30 @@
 class SubtitleStitcher {
+    // 在构造函数或 init 里添加 resultImage 拖拽到 workspace 的处理
+
+    // 新增方法：将结果图片以原始比例添加回工作区
+    addResultImageToWorkspace(dataUrl) {
+        const img = new window.Image();
+        img.onload = () => {
+            // 伪造一个 File 对象用于一致性（来源为 result）
+            const file = { name: 'result.jpg', type: 'image/jpeg', fromResult: true };
+            const imageObj = {
+                element: img,
+                file: file,
+                crop: {
+                    size: 100,
+                    position: 0,
+                    orientation: this.orientation // 保持当前方向
+                }
+            };
+            this.images.push(imageObj);
+            this.createWorkspacePreview(imageObj, this.images.length - 1);
+            this.processBtn.disabled = false;
+            this.clearAllBtn.disabled = false;
+            this.selectImage(this.images.length - 1);
+        };
+        img.src = dataUrl;
+    }
+    
     constructor() {
         this.images = [];
         this.selectedImageIndex = -1;
@@ -28,13 +54,18 @@ class SubtitleStitcher {
         this.downloadBtn = document.getElementById('downloadBtn');
         this.orientationToggle = document.getElementById('orientationToggle');
 
+        // 初始化时隐藏结果图片和下载按钮
+        this.resultImage.style.display = 'none';
+        this.resultContainer.querySelector('.download-section').style.display = 'none';
+
         // 绑定事件
         this.imageUpload.addEventListener('change', (e) => this.handleImageUpload(e));
         this.processBtn.addEventListener('click', () => this.processImages());
         this.clearAllBtn.addEventListener('click', () => this.clearAllImages());
         this.downloadBtn.addEventListener('click', () => this.downloadResult());
+        this.orientationToggle.addEventListener('mousedown', e => e.preventDefault()); // 防止双击高亮
         this.orientationToggle.addEventListener('click', () => this.toggleOrientation());
-        
+
         // 初始化按钮文本
         this.updateOrientationToggleText();
 
@@ -71,6 +102,32 @@ class SubtitleStitcher {
             } else {
                 this.isDraggingFromOutside = false;
             }
+        });
+
+        // 恢复结果图片拖回工作区支持
+        this.resultImage.setAttribute('draggable', 'true');
+        this.resultImage.ondragstart = (e) => {
+            // 传递自定义类型，标记为 resultImage 拖拽
+            e.dataTransfer.setData('application/x-stitch-result', this.resultImage.src);
+            e.dataTransfer.effectAllowed = 'copy';
+        };
+
+        // 工作区支持接收 resultImage 拖拽
+        this.workspace.addEventListener('drop', (e) => {
+            e.preventDefault();
+            this.workspace.classList.remove('dragover');
+            // 优先处理 resultImage 拖拽
+            if (e.dataTransfer.types.includes('application/x-stitch-result')) {
+                const dataUrl = e.dataTransfer.getData('application/x-stitch-result');
+                if (dataUrl) {
+                    this.addResultImageToWorkspace(dataUrl);
+                }
+                return;
+            }
+            if (e.dataTransfer.files.length) {
+                this.handleDroppedFiles(e.dataTransfer.files);
+            }
+            this.isDraggingFromOutside = false;
         });
     }
 
@@ -124,20 +181,24 @@ class SubtitleStitcher {
         container.className = 'workspace-image-container';
         container.dataset.index = index;
 
+        // 索引显示
         const indexDisplay = document.createElement('div');
         indexDisplay.className = 'workspace-image-index';
         indexDisplay.textContent = index + 1;
         container.appendChild(indexDisplay);
 
+        // 拖拽块
         const dragBlock = document.createElement('div');
         dragBlock.className = 'workspace-image-block';
         dragBlock.dataset.index = index;
         dragBlock.draggable = false;
 
+        // 预览区
         const previewContainer = document.createElement('div');
         previewContainer.className = 'workspace-image';
         previewContainer.dataset.index = index;
 
+        // 图片
         const img = imageObj.element.cloneNode();
         img.style.maxWidth = '350px';
         img.style.maxHeight = '350px';
@@ -145,6 +206,7 @@ class SubtitleStitcher {
         img.style.minHeight = '263px';
         previewContainer.appendChild(img);
 
+        // 删除按钮
         const deleteBtn = document.createElement('div');
         deleteBtn.className = 'delete-btn';
         deleteBtn.innerHTML = '×';
@@ -158,6 +220,7 @@ class SubtitleStitcher {
         container.appendChild(dragBlock);
         this.workspaceImages.appendChild(container);
 
+        // 拖拽排序相关事件
         dragBlock.addEventListener('mousedown', (e) => {
             if (!e.target.closest('.workspace-image')) {
                 dragBlock.draggable = true;
@@ -166,82 +229,87 @@ class SubtitleStitcher {
         dragBlock.addEventListener('mouseup', () => {
             dragBlock.draggable = false;
         });
+        dragBlock.addEventListener('dragstart', (e) => {
+            this.draggedElement = container;
+            this.draggedIndex = parseInt(container.dataset.index);
+            this.draggedWasSelected = (this.selectedImageIndex === this.draggedIndex);
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', this.draggedIndex);
+            setTimeout(() => container.style.opacity = '0.5', 0);
+        });
+        dragBlock.addEventListener('dragend', (e) => {
+            this.draggedElement.style.opacity = '1';
+            this.draggedElement = null;
+            this.isDraggingFromOutside = false;
+            this.draggedIndex = null;
+        });
+        dragBlock.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            if (!this.isDraggingFromOutside && this.draggedElement && this.draggedElement !== container) {
+                container.style.backgroundColor = '#f0f8ff';
+            }
+        });
+        
+        dragBlock.addEventListener('dragleave', (e) => {
+            container.style.backgroundColor = '';
+        });
+        
+        dragBlock.addEventListener('drop', (e) => {
+            e.preventDefault();
+            container.style.backgroundColor = '';
+            
+            if (!this.isDraggingFromOutside && this.draggedElement && this.draggedIndex !== null) {
+                const targetIndex = parseInt(container.dataset.index);
+                if (this.draggedIndex !== targetIndex) {
+                    // 交换图片数据
+                    [this.images[this.draggedIndex], this.images[targetIndex]] = 
+                    [this.images[targetIndex], this.images[this.draggedIndex]];
+                    
+                    // 重新渲染两个容器
+                    this.refreshImageContainer(this.draggedIndex);
+                    this.refreshImageContainer(targetIndex);
+                    
+                    // 更新选中状态
+                    if (this.draggedWasSelected) {
+                        this.selectImage(targetIndex);
+                    } else if (this.selectedImageIndex === targetIndex) {
+                        this.selectImage(this.draggedIndex);
+                    }
+                }
+            }
+        });
 
         dragBlock.addEventListener('click', (e) => {
             e.stopPropagation();
             this.selectImage(parseInt(container.dataset.index));
         });
 
-        dragBlock.addEventListener('dragstart', (e) => {
-            this.draggedElement = container;
-            this.draggedIndex = parseInt(container.dataset.index);
-            // 记录拖动前是否为选中图片
-            this.draggedWasSelected = (this.selectedImageIndex === this.draggedIndex);
-            e.dataTransfer.effectAllowed = 'move';
-            e.dataTransfer.setData('text/plain', this.draggedIndex);
-            setTimeout(() => container.style.opacity = '0.5', 0);
-        });
-
-        dragBlock.addEventListener('dragend', (e) => {
-            this.draggedElement.style.opacity = '1';
-            const draggedWasSelected = this.draggedWasSelected;
-            const draggedFile = this.images[this.draggedIndex]?.file;
-            this.draggedElement = null;
-            this.isDraggingFromOutside = false;
-            
-            const newOrder = Array.from(this.workspaceImages.children).map(child => parseInt(child.dataset.index));
-            const newImages = newOrder.map(i => this.images[i]);
-            this.images = newImages;
-
-            this.updateImageIndices();
-            // 拖动的是选中图片，则选中新位置
-            if (draggedWasSelected && draggedFile) {
-                const newIdx = this.images.findIndex(img => img.file === draggedFile);
-                if (newIdx !== -1) this.selectImage(newIdx);
-            }
-            this.draggedIndex = null;
-        });
-
-        dragBlock.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            if (!this.isDraggingFromOutside && this.draggedElement) {
-                const afterElement = this.getDragAfterElement(this.workspaceImages, e.clientY);
-                if (afterElement == null) {
-                    this.workspaceImages.appendChild(this.draggedElement);
-                } else {
-                    this.workspaceImages.insertBefore(this.draggedElement, afterElement);
-                }
-            }
-        });
-
         this.updateImageCropOverlay(previewContainer, imageObj);
     }
 
-    getDragAfterElement(container, y) {
-        const draggableElements = [...container.querySelectorAll('.workspace-image-container:not(.dragging)')];
-        return draggableElements.reduce((closest, child) => {
-            const box = child.getBoundingClientRect();
-            const offset = y - box.top - box.height / 2;
-            if (offset < 0 && offset > closest.offset) {
-                return { offset: offset, element: child };
-            } else {
-                return closest;
-            }
-        }, { offset: Number.NEGATIVE_INFINITY }).element;
-    }
-
-    updateImageIndices() {
-        const containers = this.workspaceImages.querySelectorAll('.workspace-image-container');
-        containers.forEach((container, newIndex) => {
-            const oldIndex = parseInt(container.dataset.index);
-            const imageObj = this.images.find((img, i) => i === oldIndex); // This is tricky after reordering
-            
-            container.dataset.index = newIndex;
-            container.querySelector('.workspace-image-index').textContent = newIndex + 1;
-            container.querySelector('.workspace-image-block').dataset.index = newIndex;
-            container.querySelector('.workspace-image').dataset.index = newIndex;
-        });
-        this.refreshAllCropOverlays();
+    // 刷新指定索引的容器内容
+    refreshImageContainer(index) {
+        const container = this.workspaceImages.children[index];
+        if (!container) return;
+        
+        const imageObj = this.images[index];
+        const previewContainer = container.querySelector('.workspace-image');
+        const img = previewContainer.querySelector('img');
+        
+        // 更新图片源
+        img.src = imageObj.element.src;
+        
+        // 更新索引
+        container.dataset.index = index;
+        container.querySelector('.workspace-image-block').dataset.index = index;
+        previewContainer.dataset.index = index;
+        
+        // 更新序号显示
+        const indexDisplay = container.querySelector('.workspace-image-index');
+        indexDisplay.textContent = index + 1;
+        
+        // 更新裁剪覆盖层
+        this.updateImageCropOverlay(previewContainer, imageObj);
     }
 
     selectImage(index) {
@@ -289,7 +357,14 @@ class SubtitleStitcher {
             ['left', 'right'].forEach(handleType => {
                 const handle = document.createElement('div');
                 handle.className = `resize-handle ${handleType}`;
-                handle.addEventListener('mousedown', (e) => this.startResize(e, handleType));
+                handle.addEventListener('mousedown', (e) => {
+                    // 自动选中当前图片
+                    const index = parseInt(previewContainer.dataset.index);
+                    if (this.selectedImageIndex !== index) {
+                        this.selectImage(index);
+                    }
+                    this.startResize(e, handleType);
+                });
                 overlay.appendChild(handle);
             });
         } else {
@@ -304,7 +379,14 @@ class SubtitleStitcher {
             ['top', 'bottom'].forEach(handleType => {
                 const handle = document.createElement('div');
                 handle.className = `resize-handle ${handleType}`;
-                handle.addEventListener('mousedown', (e) => this.startResize(e, handleType));
+                handle.addEventListener('mousedown', (e) => {
+                    // 自动选中当前图片
+                    const index = parseInt(previewContainer.dataset.index);
+                    if (this.selectedImageIndex !== index) {
+                        this.selectImage(index);
+                    }
+                    this.startResize(e, handleType);
+                });
                 overlay.appendChild(handle);
             });
         }
@@ -419,7 +501,10 @@ class SubtitleStitcher {
             this.selectedImageIndex = -1;
             this.processBtn.disabled = true;
             this.clearAllBtn.disabled = true;
-            this.resultContainer.style.display = 'none';
+            this.resultImage.style.display = 'none';
+            this.resultContainer.querySelector('.download-section').style.display = 'none';
+            // 保证无图片时结果区高度为默认
+            this.resultContainer.style.minHeight = '500px';
         } else {
             this.selectImage(Math.max(0, index - 1));
         }
@@ -432,18 +517,25 @@ class SubtitleStitcher {
         this.selectedImageIndex = -1;
         this.processBtn.disabled = true;
         this.clearAllBtn.disabled = true;
-        this.resultContainer.style.display = 'none';
+        this.resultImage.style.display = 'none';
+        this.resultContainer.querySelector('.download-section').style.display = 'none';
+        // 保证无图片时结果区高度为默认
+        this.resultContainer.style.minHeight = '500px';
         this.updateOrientationToggleText();
     }
 
     processImages() {
-        if (this.images.length === 0) return;
+        // 只处理工作区内所有图片，与选中图片无关
+        if (!this.images || this.images.length === 0) return;
+        // 有结果时移除最小高度
+        this.resultContainer.style.minHeight = '';
 
+        // 只用一个 <img id="resultImage">，每次都覆盖
         const canvas = this.resultCanvas;
         const ctx = canvas.getContext('2d');
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // Determine stitch direction from the FIRST image
+        // 以第一张图片的 orientation 作为拼接方向
         const stitchDirection = this.images[0].crop.orientation;
 
         if (stitchDirection === 'horizontal') {
@@ -488,8 +580,17 @@ class SubtitleStitcher {
             });
         }
 
-        this.resultImage.src = canvas.toDataURL('image/png');
-        this.resultContainer.style.display = 'block';
+        // 更新结果图片，只保留一张
+        this.resultImage.src = canvas.toDataURL('image/jpeg', 0.92);
+        this.resultImage.style.display = 'block';  // 改为block确保显示
+        this.resultContainer.querySelector('.download-section').style.display = 'block';  // 改为block确保显示
+
+        // 为结果图片添加拖拽支持
+        this.resultImage.setAttribute('draggable', 'true');
+        this.resultImage.ondragstart = (e) => {
+            e.dataTransfer.setData('text/uri-list', this.resultImage.src);
+            e.dataTransfer.setData('text/plain', this.resultImage.src);
+        };
     }
 
     downloadResult() {

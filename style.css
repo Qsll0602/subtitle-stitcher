@@ -12,9 +12,9 @@ body {
 }
 
 .container {
-    max-width: 1400px;
+    max-width: 1800px;
     margin: 0 auto;
-    padding: 20px;
+    padding: 20px 40px;
 }
 
 h1 {
@@ -41,15 +41,24 @@ h2 {
     display: none;
 }
 
-.upload-btn {
+
+.upload-btn, #processBtn, .clear-all-btn, .orientation-toggle {
     display: inline-block;
     padding: 12px 24px;
-    background-color: #3498db;
-    color: white;
+    font-size: 18px;
+    font-family: inherit;
     border-radius: 5px;
     cursor: pointer;
     transition: background-color 0.3s;
     margin-right: 10px;
+    border: none;
+    outline: none;
+    user-select: none;
+}
+
+.upload-btn {
+    background-color: #3498db;
+    color: white;
 }
 
 .upload-btn:hover {
@@ -57,14 +66,8 @@ h2 {
 }
 
 #processBtn {
-    padding: 12px 24px;
     background-color: #2ecc71;
     color: white;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-    transition: background-color 0.3s;
-    margin-right: 10px;
 }
 
 #processBtn:hover:not(:disabled) {
@@ -77,14 +80,8 @@ h2 {
 }
 
 .clear-all-btn {
-    padding: 12px 24px;
     background-color: #e74c3c;
     color: white;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-    transition: background-color 0.3s;
-    margin-right: 10px;
 }
 
 .clear-all-btn:hover:not(:disabled) {
@@ -142,7 +139,8 @@ h2 {
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
     margin-bottom: 20px;
     min-height: 500px;
-    border: 2px dashed #bbb;
+    height: 100%;
+    /* border: 2px dashed #bbb; */
     position: relative;
 }
 
@@ -157,8 +155,9 @@ h2 {
 
 .workspace-images {
     display: flex;
-    flex-wrap: wrap;
-    gap: 35px; /* 增加间隙 */
+    flex-direction: column;
+    align-items: center;
+    gap: 35px;
     margin-top: 20px;
 }
 
@@ -167,12 +166,16 @@ h2 {
     display: flex;
     flex-direction: column;
     align-items: center;
+    width: 100%;
+    max-width: 400px;
 }
 
 .workspace-image-index {
     position: absolute;
-    top: 0;
-    left: 0;
+    top: -12px; /* 调整为外侧左上角 */
+    left: -12px; /* 调整为外侧左上角 */
+    margin: 0;
+    transform: none;
     background-color: #3498db;
     color: white;
     width: 24px;
@@ -185,7 +188,6 @@ h2 {
     font-size: 12px;
     z-index: 20;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-    transform: translate(-35%, -35%);
 }
 
 .workspace-image-block {
@@ -227,8 +229,8 @@ h2 {
 
 .delete-btn {
     position: absolute;
-    top: 0;
-    right: 0; /* 移回右上角 */
+    top: -14px; /* 调整为外侧右上角 */
+    right: -14px; /* 调整为外侧右上角 */
     width: 28px;
     height: 28px;
     background-color: #e74c3c;
@@ -245,7 +247,6 @@ h2 {
     opacity: 0;
     transition: opacity 0.2s;
     pointer-events: auto;
-    transform: translate(35%, -35%); /* 更靠分块右上角 */
 }
 
 .workspace-image-block:hover .delete-btn {
@@ -327,19 +328,16 @@ h2 {
 }
 
 .orientation-toggle {
-    display: inline-block;
-    padding: 8px 16px;
     background-color: #9b59b6;
     color: white;
-    border-radius: 5px;
-    cursor: pointer;
 }
 
 .main-content {
     display: flex;
     flex-wrap: wrap;
-    gap: 20px;
+    gap: 40px;
     margin-bottom: 20px;
+    align-items: stretch;
 }
 
 .workspace-section {
@@ -354,10 +352,28 @@ h2 {
     padding: 20px;
     border-radius: 10px;
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    display: flex;        
+    flex-direction: column;
+    justify-content: flex-start; 
+    height: 100%;         
 }
 
 .result-container {
     text-align: center;
+    min-height: 500px;
+    min-width: 350px;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-start;
+    box-sizing: border-box;
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.05);
+    overflow: hidden;
+    border: none !important;
+    box-shadow: none !important;
 }
 
 #resultImage {
@@ -439,5 +455,10 @@ h2 {
     
     .workspace-image-block {
         padding: 15px;
+    }
+
+    .result-container img {
+    border: none !important;
+    box-shadow: none !important;
     }
 }
