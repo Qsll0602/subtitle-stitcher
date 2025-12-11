@@ -21,8 +21,11 @@
 
         <div class="main-content">
             <div class="workspace-section">
-                <div class="workspace" id="workspace">
+                <!-- 为工作区添加tabindex使其能接收键盘焦点 -->
+                <div class="workspace" id="workspace" tabindex="0">
                     <h2>工作区</h2>
+                    <!-- 添加提示文本 -->
+                    <div class="workspace-paste-hint">按下 Ctrl+V 添加截图</div>
                     <div class="workspace-images" id="workspaceImages"></div>
                 </div>
             </div>

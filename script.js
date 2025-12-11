@@ -104,6 +104,10 @@ class SubtitleStitcher {
             }
         });
 
+        // 添加键盘事件监听器以支持Ctrl+V粘贴
+        this.workspace.addEventListener('keydown', (e) => this.handleKeyDown(e));
+        this.workspace.addEventListener('paste', (e) => this.handlePaste(e));
+
         // 恢复结果图片拖回工作区支持
         this.resultImage.setAttribute('draggable', 'true');
         this.resultImage.ondragstart = (e) => {
@@ -129,6 +133,67 @@ class SubtitleStitcher {
             }
             this.isDraggingFromOutside = false;
         });
+
+        // 初始化时显示或隐藏工作区提示文本
+        this.showWorkspaceHint();
+    }
+
+    // 处理键盘事件
+    handleKeyDown(e) {
+        // 当用户按下Ctrl+V时，确保焦点在工作区上
+        if (e.ctrlKey && e.key === 'v') {
+            // 焦点已经在工作区上，直接处理粘贴事件
+            // 实际的粘贴处理将在paste事件中进行
+        }
+    }
+
+    // 处理粘贴事件
+    handlePaste(e) {
+        // 阻止默认粘贴行为
+        e.preventDefault();
+        
+        // 检查剪贴板中是否有图片数据
+        const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+        
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            // 检查是否为图片类型
+            if (item.type.indexOf('image') !== -1) {
+                const file = item.getAsFile();
+                if (file) {
+                    this.processPastedFile(file);
+                }
+            }
+        }
+    }
+
+    // 处理粘贴的文件
+    processPastedFile(file) {
+        if (!file || !file.type.match('image.*')) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                const imageObj = {
+                    element: img,
+                    file: file,
+                    crop: {
+                        size: 50,
+                        position: 25,
+                        orientation: 'vertical' // 新图片默认使用纵向裁剪
+                    }
+                };
+
+                this.images.push(imageObj);
+                this.createWorkspacePreview(imageObj, this.images.length - 1);
+                this.processBtn.disabled = false;
+                this.clearAllBtn.disabled = false;
+                this.selectImage(this.images.length - 1);
+            };
+            img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
     }
 
     handleImageUpload(event) {
@@ -202,8 +267,8 @@ class SubtitleStitcher {
         const img = imageObj.element.cloneNode();
         img.style.maxWidth = '350px';
         img.style.maxHeight = '350px';
-        img.style.minWidth = '263px';
-        img.style.minHeight = '263px';
+        img.style.minWidth = '50px';
+        img.style.minHeight = '50px';
         previewContainer.appendChild(img);
 
         // 删除按钮
@@ -219,6 +284,9 @@ class SubtitleStitcher {
         dragBlock.appendChild(previewContainer);
         container.appendChild(dragBlock);
         this.workspaceImages.appendChild(container);
+
+        // 隐藏工作区提示文本
+        this.hideWorkspaceHint();
 
         // 拖拽排序相关事件
         dragBlock.addEventListener('mousedown', (e) => {
@@ -285,6 +353,22 @@ class SubtitleStitcher {
         });
 
         this.updateImageCropOverlay(previewContainer, imageObj);
+    }
+
+    // 隐藏工作区提示文本
+    hideWorkspaceHint() {
+        const hint = this.workspace.querySelector('.workspace-paste-hint');
+        if (hint) {
+            hint.style.display = 'none';
+        }
+    }
+
+    // 显示工作区提示文本
+    showWorkspaceHint() {
+        const hint = this.workspace.querySelector('.workspace-paste-hint');
+        if (hint && this.images.length === 0) {
+            hint.style.display = 'block';
+        }
     }
 
     // 刷新指定索引的容器内容
@@ -505,6 +589,8 @@ class SubtitleStitcher {
             this.resultContainer.querySelector('.download-section').style.display = 'none';
             // 保证无图片时结果区高度为默认
             this.resultContainer.style.minHeight = '500px';
+            // 显示工作区提示文本
+            this.showWorkspaceHint();
         } else {
             this.selectImage(Math.max(0, index - 1));
         }
@@ -522,6 +608,8 @@ class SubtitleStitcher {
         // 保证无图片时结果区高度为默认
         this.resultContainer.style.minHeight = '500px';
         this.updateOrientationToggleText();
+        // 显示工作区提示文本
+        this.showWorkspaceHint();
     }
 
     processImages() {
