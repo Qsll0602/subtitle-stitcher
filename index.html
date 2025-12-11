@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>字幕拼接工具</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>字幕拼接工具</h1>
+        <p>上传多张图片，截取部分区域并拼接成一张新图片</p>
+        
+        <div class="upload-section">
+            <input type="file" id="imageUpload" accept="image/*" multiple>
+            <label for="imageUpload" class="upload-btn">选择图片</label>
+            <button id="processBtn" disabled>处理图片</button>
+            <button id="clearAllBtn" class="clear-all-btn" disabled>清除所有</button>
+            <span id="orientationToggle" class="orientation-toggle">切换为纵向</span>
+        </div>
+
+        <div class="main-content">
+            <div class="workspace-section">
+                <div class="workspace" id="workspace">
+                    <h2>工作区</h2>
+                    <div class="workspace-images" id="workspaceImages"></div>
+                </div>
+            </div>
+
+            <div class="preview-section">
+                <!-- 裁剪滑块控制面板已隐藏，仅保留拖拽绿框裁剪方式 -->
+                
+                <div id="resultContainer" class="result-container" style="display: none;">
+                    <h2>结果</h2>
+                    <canvas id="resultCanvas" style="display: none;"></canvas>
+                    <img id="resultImage" alt="拼接结果">
+                    <div class="download-section">
+                        <button id="downloadBtn">下载结果</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
