@@ -1,43 +1,42 @@
 class SubtitleStitcher {
     // 在构造函数或 init 里添加 resultImage 拖拽到 workspace 的处理
 
-    // 新增方法：将结果图片以原始比例添加回工作区
+    // 将结果图片以原始比例添加回工作区
     addResultImageToWorkspace(dataUrl) {
         const img = new window.Image();
         img.onload = () => {
-            // 伪造一个 File 对象用于一致性（来源为 result）
-            const file = { name: 'result.jpg', type: 'image/jpeg', fromResult: true };
-            const imageObj = {
-                element: img,
-                file: file,
-                crop: {
-                    size: 100,
-                    position: 0,
-                    orientation: this.orientation // 保持当前方向
-                }
-            };
-            this.images.push(imageObj);
-            this.createWorkspacePreview(imageObj, this.images.length - 1);
-            this.processBtn.disabled = false;
-            this.clearAllBtn.disabled = false;
-            this.selectImage(this.images.length - 1);
+            const imageObj = this.createImageObj(img, null);
+            // 结果图使用全图裁剪（100%尺寸，从0开始）
+            imageObj.crop.size = 100;
+            imageObj.crop.position = 0;
+            imageObj.crop.orientation = this.orientation;
+            this.onImageAdded(imageObj);
         };
         img.src = dataUrl;
     }
     
     constructor() {
+        // ---- 常量 ----
+        this.DEFAULT_CROP_SIZE = 50;       // 默认裁剪百分比
+        this.DEFAULT_CROP_POSITION = 25;   // 默认裁剪起始位置百分比
+        this.DEFAULT_ORIENTATION = 'vertical';
+        this.JPEG_QUALITY = 0.92;
+        this.MIN_CROP_PX = 10;             // 最小裁剪像素
+
+        // ---- 数据状态 ----
         this.images = [];
         this.selectedImageIndex = -1;
-        this.cropSize = 50; // 百分比
-        this.cropPosition = 25; // 百分比
-        this.orientation = 'vertical'; // 全局方向，主要用于拼接
+        this.orientation = this.DEFAULT_ORIENTATION;
+
+        // ---- 拖拽状态 ----
         this.draggedElement = null;
         this.draggedIndex = null;
+        this.draggedWasSelected = false;
+        this.isDraggingFromOutside = false;
+
+        // ---- 缩放状态 ----
         this.isResizing = false;
-        this.resizeHandle = null;
-        this.isDraggingFromOutside = false; // 标记是否从外部拖拽
-        this.dragOverElement = null;
-        this.dragOverTimeout = null;
+
         this.init();
     }
 
@@ -87,15 +86,6 @@ class SubtitleStitcher {
             }
         });
 
-        this.workspace.addEventListener('drop', (e) => {
-            e.preventDefault();
-            this.workspace.classList.remove('dragover');
-            if (e.dataTransfer.files.length) {
-                this.handleDroppedFiles(e.dataTransfer.files);
-            }
-            this.isDraggingFromOutside = false;
-        });
-
         this.workspace.addEventListener('dragenter', (e) => {
             if (e.dataTransfer.types.includes('Files')) {
                 this.isDraggingFromOutside = true;
@@ -104,8 +94,7 @@ class SubtitleStitcher {
             }
         });
 
-        // 添加键盘事件监听器以支持Ctrl+V粘贴
-        this.workspace.addEventListener('keydown', (e) => this.handleKeyDown(e));
+        // 键盘粘贴支持
         this.workspace.addEventListener('paste', (e) => this.handlePaste(e));
 
         // 恢复结果图片拖回工作区支持
@@ -138,14 +127,44 @@ class SubtitleStitcher {
         this.showWorkspaceHint();
     }
 
-    // 处理键盘事件
-    handleKeyDown(e) {
-        // 当用户按下Ctrl+V时，确保焦点在工作区上
-        if (e.ctrlKey && e.key === 'v') {
-            // 焦点已经在工作区上，直接处理粘贴事件
-            // 实际的粘贴处理将在paste事件中进行
-        }
+    // ========== 图片加载与对象创建 ==========
+
+    // 创建标准的图片数据对象
+    createImageObj(imgElement, file) {
+        return {
+            element: imgElement,
+            file: file,
+            crop: {
+                size: this.DEFAULT_CROP_SIZE,
+                position: this.DEFAULT_CROP_POSITION,
+                orientation: this.DEFAULT_ORIENTATION
+            }
+        };
     }
+
+    // 图片添加到工作区后的统一处理
+    onImageAdded(imageObj) {
+        this.images.push(imageObj);
+        this.createWorkspacePreview(imageObj, this.images.length - 1);
+        this.processBtn.disabled = false;
+        this.clearAllBtn.disabled = false;
+        this.selectImage(this.images.length - 1);
+    }
+
+    // 从 File 加载为 Image 元素
+    loadImageFromFile(file, callback) {
+        if (!file || !file.type.match('image.*')) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => callback(img);
+            img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    }
+
+    // ========== 键盘 & 粘贴处理 ==========
 
     // 处理粘贴事件
     handlePaste(e) {
@@ -169,31 +188,10 @@ class SubtitleStitcher {
 
     // 处理粘贴的文件
     processPastedFile(file) {
-        if (!file || !file.type.match('image.*')) return;
-
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const img = new Image();
-            img.onload = () => {
-                const imageObj = {
-                    element: img,
-                    file: file,
-                    crop: {
-                        size: 50,
-                        position: 25,
-                        orientation: 'vertical' // 新图片默认使用纵向裁剪
-                    }
-                };
-
-                this.images.push(imageObj);
-                this.createWorkspacePreview(imageObj, this.images.length - 1);
-                this.processBtn.disabled = false;
-                this.clearAllBtn.disabled = false;
-                this.selectImage(this.images.length - 1);
-            };
-            img.src = e.target.result;
-        };
-        reader.readAsDataURL(file);
+        this.loadImageFromFile(file, (img) => {
+            const imageObj = this.createImageObj(img, file);
+            this.onImageAdded(imageObj);
+        });
     }
 
     handleImageUpload(event) {
@@ -213,31 +211,10 @@ class SubtitleStitcher {
         if (files.length === 0) return;
 
         Array.from(files).forEach((file) => {
-            if (!file.type.match('image.*')) return;
-
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const img = new Image();
-                img.onload = () => {
-                    const imageObj = {
-                        element: img,
-                        file: file,
-                        crop: {
-                            size: 50,
-                            position: 25,
-                            orientation: 'vertical' // 新图片默认使用纵向裁剪
-                        }
-                    };
-
-                    this.images.push(imageObj);
-                    this.createWorkspacePreview(imageObj, this.images.length - 1);
-                    this.processBtn.disabled = false;
-                    this.clearAllBtn.disabled = false;
-                    this.selectImage(this.images.length - 1);
-                };
-                img.src = e.target.result;
-            };
-            reader.readAsDataURL(file);
+            this.loadImageFromFile(file, (img) => {
+                const imageObj = this.createImageObj(img, file);
+                this.onImageAdded(imageObj);
+            });
         });
     }
 
@@ -265,10 +242,6 @@ class SubtitleStitcher {
 
         // 图片
         const img = imageObj.element.cloneNode();
-        img.style.maxWidth = '350px';
-        img.style.maxHeight = '350px';
-        img.style.minWidth = '50px';
-        img.style.minHeight = '50px';
         previewContainer.appendChild(img);
 
         // 删除按钮
@@ -375,25 +348,32 @@ class SubtitleStitcher {
     refreshImageContainer(index) {
         const container = this.workspaceImages.children[index];
         if (!container) return;
-        
+
         const imageObj = this.images[index];
         const previewContainer = container.querySelector('.workspace-image');
         const img = previewContainer.querySelector('img');
-        
-        // 更新图片源
-        img.src = imageObj.element.src;
-        
-        // 更新索引
+
+        // 更新索引（先更新，让 DOM 属性始终正确）
         container.dataset.index = index;
         container.querySelector('.workspace-image-block').dataset.index = index;
         previewContainer.dataset.index = index;
-        
+
         // 更新序号显示
         const indexDisplay = container.querySelector('.workspace-image-index');
         indexDisplay.textContent = index + 1;
-        
-        // 更新裁剪覆盖层
-        this.updateImageCropOverlay(previewContainer, imageObj);
+
+        // 更新图片源，等加载完成后再更新裁剪覆盖层（确保 offsetWidth/Height 正确）
+        const updateOverlay = () => this.updateImageCropOverlay(previewContainer, imageObj);
+        if (img.src !== imageObj.element.src) {
+            img.src = imageObj.element.src;
+            if (img.complete) {
+                updateOverlay();
+            } else {
+                img.onload = updateOverlay;
+            }
+        } else {
+            updateOverlay();
+        }
     }
 
     selectImage(index) {
@@ -486,15 +466,20 @@ class SubtitleStitcher {
         const previewContainer = document.querySelector(`.workspace-image[data-index="${this.selectedImageIndex}"]`);
         const img = previewContainer.querySelector('img');
         const overlay = previewContainer.querySelector('.crop-overlay');
-        
+
         const startX = e.clientX;
         const startY = e.clientY;
         const startWidth = overlay.offsetWidth;
         const startHeight = overlay.offsetHeight;
-    const startLeft = parseFloat(overlay.style.left) || 0;
-    const startTop = parseFloat(overlay.style.top) || 0;
+        const startLeft = parseFloat(overlay.style.left) || 0;
+        const startTop = parseFloat(overlay.style.top) || 0;
         const imgWidth = img.offsetWidth;
         const imgHeight = img.offsetHeight;
+
+        // 最小裁剪尺寸（像素），防止裁剪框缩到看不见
+        const MIN_CROP_PX = this.MIN_CROP_PX;
+
+        const clamp = (val, min, max) => Math.min(Math.max(val, min), max);
 
         const handleMouseMove = (moveEvent) => {
             if (!this.isResizing) return;
@@ -503,27 +488,35 @@ class SubtitleStitcher {
             if (imageObj.crop.orientation === 'horizontal') {
                 const dx = moveEvent.clientX - startX;
                 if (handleType === 'left') {
-                    const newLeft = Math.max(0, startLeft + dx);
-                    const newWidth = startWidth - (newLeft - startLeft);
-                    if (newLeft + newWidth > imgWidth) return;
+                    // 左边缘：允许范围 [0, 右边缘-MIN]，右边缘 = startLeft + startWidth
+                    const rightEdge = startLeft + startWidth;
+                    const maxLeft = rightEdge - MIN_CROP_PX;
+                    const newLeft = clamp(startLeft + dx, 0, maxLeft);
+                    const newWidth = rightEdge - newLeft;
                     imageObj.crop.position = (newLeft / imgWidth) * 100;
                     imageObj.crop.size = (newWidth / imgWidth) * 100;
                 } else { // right
-                    const newWidth = Math.min(imgWidth - startLeft, startWidth + dx);
-                    if (newWidth < 0) return;
+                    // 右边缘：允许范围 [左边缘+MIN, imgWidth]
+                    const minWidth = MIN_CROP_PX;
+                    const maxWidth = imgWidth - startLeft;
+                    const newWidth = clamp(startWidth + dx, minWidth, maxWidth);
                     imageObj.crop.size = (newWidth / imgWidth) * 100;
                 }
             } else { // vertical
                 const dy = moveEvent.clientY - startY;
                 if (handleType === 'top') {
-                    const newTop = Math.max(0, startTop + dy);
-                    const newHeight = startHeight - (newTop - startTop);
-                    if (newTop + newHeight > imgHeight) return;
+                    // 上边缘：允许范围 [0, 下边缘-MIN]，下边缘 = startTop + startHeight
+                    const bottomEdge = startTop + startHeight;
+                    const maxTop = bottomEdge - MIN_CROP_PX;
+                    const newTop = clamp(startTop + dy, 0, maxTop);
+                    const newHeight = bottomEdge - newTop;
                     imageObj.crop.position = (newTop / imgHeight) * 100;
                     imageObj.crop.size = (newHeight / imgHeight) * 100;
                 } else { // bottom
-                    const newHeight = Math.min(imgHeight - startTop, startHeight + dy);
-                    if (newHeight < 0) return;
+                    // 下边缘：允许范围 [上边缘+MIN, imgHeight]
+                    const minHeight = MIN_CROP_PX;
+                    const maxHeight = imgHeight - startTop;
+                    const newHeight = clamp(startHeight + dy, minHeight, maxHeight);
                     imageObj.crop.size = (newHeight / imgHeight) * 100;
                 }
             }
@@ -563,7 +556,7 @@ class SubtitleStitcher {
     updateOrientationToggleText() {
         if (!this.orientationToggle) return;
         
-        let currentOrientation = 'vertical'; // Default if no image is selected
+        let currentOrientation = this.DEFAULT_ORIENTATION;
         if (this.selectedImageIndex !== -1 && this.images[this.selectedImageIndex]) {
             currentOrientation = this.images[this.selectedImageIndex].crop.orientation;
         }
@@ -669,7 +662,7 @@ class SubtitleStitcher {
         }
 
         // 更新结果图片，只保留一张
-        this.resultImage.src = canvas.toDataURL('image/jpeg', 0.92);
+        this.resultImage.src = canvas.toDataURL('image/jpeg', this.JPEG_QUALITY);
         this.resultImage.style.display = 'block';  // 改为block确保显示
         this.resultContainer.querySelector('.download-section').style.display = 'block';  // 改为block确保显示
 
