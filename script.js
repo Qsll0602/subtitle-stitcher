@@ -56,6 +56,7 @@ class SubtitleStitcher {
         // 初始化时隐藏结果图片和下载按钮
         this.resultImage.style.display = 'none';
         this.resultContainer.querySelector('.download-section').style.display = 'none';
+        this.resultEmptyHint = this.resultContainer.querySelector('.result-empty-hint');
 
         // 绑定事件
         this.imageUpload.addEventListener('change', (e) => this.handleImageUpload(e));
@@ -96,6 +97,13 @@ class SubtitleStitcher {
 
         // 键盘粘贴支持
         this.workspace.addEventListener('paste', (e) => this.handlePaste(e));
+        // 键盘删除支持（Delete / Backspace）
+        this.workspace.addEventListener('keydown', (e) => {
+            if ((e.key === 'Delete' || e.key === 'Backspace') && this.selectedImageIndex !== -1) {
+                e.preventDefault();
+                this.deleteImage(this.selectedImageIndex);
+            }
+        });
 
         // 恢复结果图片拖回工作区支持
         this.resultImage.setAttribute('draggable', 'true');
@@ -125,6 +133,20 @@ class SubtitleStitcher {
 
         // 初始化时显示或隐藏工作区提示文本
         this.showWorkspaceHint();
+
+        // 图片计数标签
+        this.imageCountLabel = document.createElement('span');
+        this.imageCountLabel.className = 'image-count';
+        const workspaceH2 = this.workspace.querySelector('h2');
+        if (workspaceH2) workspaceH2.appendChild(this.imageCountLabel);
+        this.updateImageCount();
+
+        // 窗口缩放时刷新所有裁剪覆盖层（debounce 150ms）
+        this._resizeTimer = null;
+        window.addEventListener('resize', () => {
+            clearTimeout(this._resizeTimer);
+            this._resizeTimer = setTimeout(() => this.refreshAllCropOverlays(), 150);
+        });
     }
 
     // ========== 图片加载与对象创建 ==========
@@ -149,6 +171,7 @@ class SubtitleStitcher {
         this.processBtn.disabled = false;
         this.clearAllBtn.disabled = false;
         this.selectImage(this.images.length - 1);
+        this.updateImageCount();
     }
 
     // 从 File 加载为 Image 元素
@@ -223,17 +246,17 @@ class SubtitleStitcher {
         container.className = 'workspace-image-container';
         container.dataset.index = index;
 
-        // 索引显示
-        const indexDisplay = document.createElement('div');
-        indexDisplay.className = 'workspace-image-index';
-        indexDisplay.textContent = index + 1;
-        container.appendChild(indexDisplay);
-
         // 拖拽块
         const dragBlock = document.createElement('div');
         dragBlock.className = 'workspace-image-block';
         dragBlock.dataset.index = index;
         dragBlock.draggable = false;
+
+        // 序号标签（嵌在块左上角，选中时与蓝色外框融为一体）
+        const indexDisplay = document.createElement('div');
+        indexDisplay.className = 'workspace-image-index';
+        indexDisplay.textContent = index + 1;
+        dragBlock.appendChild(indexDisplay);
 
         // 预览区
         const previewContainer = document.createElement('div');
@@ -286,18 +309,26 @@ class SubtitleStitcher {
         });
         dragBlock.addEventListener('dragover', (e) => {
             e.preventDefault();
+            // 清除所有容器的指示线
+            Array.from(this.workspaceImages.children).forEach(c => {
+                c.style.boxShadow = '';
+            });
             if (!this.isDraggingFromOutside && this.draggedElement && this.draggedElement !== container) {
-                container.style.backgroundColor = '#f0f8ff';
+                const rect = dragBlock.getBoundingClientRect();
+                const midY = rect.top + rect.height / 2;
+                container.style.boxShadow = e.clientY < midY
+                    ? 'inset 0 3px 0 #4a90d9'
+                    : 'inset 0 -3px 0 #4a90d9';
             }
         });
         
         dragBlock.addEventListener('dragleave', (e) => {
-            container.style.backgroundColor = '';
+            container.style.boxShadow = '';
         });
         
         dragBlock.addEventListener('drop', (e) => {
             e.preventDefault();
-            container.style.backgroundColor = '';
+            container.style.boxShadow = '';
             
             if (!this.isDraggingFromOutside && this.draggedElement && this.draggedIndex !== null) {
                 const targetIndex = parseInt(container.dataset.index);
@@ -325,7 +356,20 @@ class SubtitleStitcher {
             this.selectImage(parseInt(container.dataset.index));
         });
 
-        this.updateImageCropOverlay(previewContainer, imageObj);
+        // 等图片布局完成后再创建裁剪覆盖层，避免 offsetWidth 为 0 导致横跳
+        const initOverlay = () => {
+            if (img.offsetWidth > 0) {
+                this.updateImageCropOverlay(previewContainer, imageObj);
+            } else {
+                // 极端情况：布局仍未完成，再等一帧
+                requestAnimationFrame(initOverlay);
+            }
+        };
+        if (img.complete && img.naturalWidth > 0) {
+            requestAnimationFrame(initOverlay);
+        } else {
+            img.onload = () => requestAnimationFrame(initOverlay);
+        }
     }
 
     // 隐藏工作区提示文本
@@ -342,6 +386,13 @@ class SubtitleStitcher {
         if (hint && this.images.length === 0) {
             hint.style.display = 'block';
         }
+    }
+
+    // 更新工作区图片计数
+    updateImageCount() {
+        if (!this.imageCountLabel) return;
+        const count = this.images.length;
+        this.imageCountLabel.textContent = count > 0 ? count + ' 张图片' : '';
     }
 
     // 刷新指定索引的容器内容
@@ -421,6 +472,7 @@ class SubtitleStitcher {
             ['left', 'right'].forEach(handleType => {
                 const handle = document.createElement('div');
                 handle.className = `resize-handle ${handleType}`;
+                handle.title = '拖拽调整宽度';
                 handle.addEventListener('mousedown', (e) => {
                     // 自动选中当前图片
                     const index = parseInt(previewContainer.dataset.index);
@@ -443,6 +495,7 @@ class SubtitleStitcher {
             ['top', 'bottom'].forEach(handleType => {
                 const handle = document.createElement('div');
                 handle.className = `resize-handle ${handleType}`;
+                handle.title = '拖拽调整高度';
                 handle.addEventListener('mousedown', (e) => {
                     // 自动选中当前图片
                     const index = parseInt(previewContainer.dataset.index);
@@ -454,6 +507,12 @@ class SubtitleStitcher {
                 overlay.appendChild(handle);
             });
         }
+
+        // 裁剪百分比标签
+        const percentLabel = document.createElement('span');
+        percentLabel.className = 'crop-percent';
+        percentLabel.textContent = Math.round(size) + '%';
+        overlay.appendChild(percentLabel);
     }
 
     startResize(e, handleType) {
@@ -485,48 +544,57 @@ class SubtitleStitcher {
             if (!this.isResizing) return;
             moveEvent.preventDefault();
 
+            let newLeft = startLeft, newTop = startTop, newWidth = startWidth, newHeight = startHeight;
+
             if (imageObj.crop.orientation === 'horizontal') {
                 const dx = moveEvent.clientX - startX;
                 if (handleType === 'left') {
-                    // 左边缘：允许范围 [0, 右边缘-MIN]，右边缘 = startLeft + startWidth
                     const rightEdge = startLeft + startWidth;
                     const maxLeft = rightEdge - MIN_CROP_PX;
-                    const newLeft = clamp(startLeft + dx, 0, maxLeft);
-                    const newWidth = rightEdge - newLeft;
+                    newLeft = clamp(startLeft + dx, 0, maxLeft);
+                    newWidth = rightEdge - newLeft;
                     imageObj.crop.position = (newLeft / imgWidth) * 100;
                     imageObj.crop.size = (newWidth / imgWidth) * 100;
                 } else { // right
-                    // 右边缘：允许范围 [左边缘+MIN, imgWidth]
                     const minWidth = MIN_CROP_PX;
                     const maxWidth = imgWidth - startLeft;
-                    const newWidth = clamp(startWidth + dx, minWidth, maxWidth);
+                    newWidth = clamp(startWidth + dx, minWidth, maxWidth);
                     imageObj.crop.size = (newWidth / imgWidth) * 100;
                 }
             } else { // vertical
                 const dy = moveEvent.clientY - startY;
                 if (handleType === 'top') {
-                    // 上边缘：允许范围 [0, 下边缘-MIN]，下边缘 = startTop + startHeight
                     const bottomEdge = startTop + startHeight;
                     const maxTop = bottomEdge - MIN_CROP_PX;
-                    const newTop = clamp(startTop + dy, 0, maxTop);
-                    const newHeight = bottomEdge - newTop;
+                    newTop = clamp(startTop + dy, 0, maxTop);
+                    newHeight = bottomEdge - newTop;
                     imageObj.crop.position = (newTop / imgHeight) * 100;
                     imageObj.crop.size = (newHeight / imgHeight) * 100;
                 } else { // bottom
-                    // 下边缘：允许范围 [上边缘+MIN, imgHeight]
                     const minHeight = MIN_CROP_PX;
                     const maxHeight = imgHeight - startTop;
-                    const newHeight = clamp(startHeight + dy, minHeight, maxHeight);
+                    newHeight = clamp(startHeight + dy, minHeight, maxHeight);
                     imageObj.crop.size = (newHeight / imgHeight) * 100;
                 }
             }
-            this.updateImageCropOverlay(previewContainer, imageObj);
+
+            // 直接操作样式，不做 innerHTML 清空 → 丝滑无横跳
+            overlay.style.left = newLeft + 'px';
+            overlay.style.top = newTop + 'px';
+            overlay.style.width = newWidth + 'px';
+            overlay.style.height = newHeight + 'px';
+
+            // 同步更新百分比标签
+            const pct = overlay.querySelector('.crop-percent');
+            if (pct) pct.textContent = Math.round(imageObj.crop.size) + '%';
         };
 
         const handleMouseUp = () => {
             this.isResizing = false;
             document.removeEventListener('mousemove', handleMouseMove);
             document.removeEventListener('mouseup', handleMouseUp);
+            // 松手后一次性重建 overlay 内部结构
+            this.updateImageCropOverlay(previewContainer, imageObj);
         };
 
         document.addEventListener('mousemove', handleMouseMove);
@@ -580,6 +648,7 @@ class SubtitleStitcher {
             this.clearAllBtn.disabled = true;
             this.resultImage.style.display = 'none';
             this.resultContainer.querySelector('.download-section').style.display = 'none';
+            if (this.resultEmptyHint) this.resultEmptyHint.style.display = '';
             // 保证无图片时结果区高度为默认
             this.resultContainer.style.minHeight = '500px';
             // 显示工作区提示文本
@@ -587,6 +656,7 @@ class SubtitleStitcher {
         } else {
             this.selectImage(Math.max(0, index - 1));
         }
+        this.updateImageCount();
         this.updateOrientationToggleText();
     }
 
@@ -598,8 +668,10 @@ class SubtitleStitcher {
         this.clearAllBtn.disabled = true;
         this.resultImage.style.display = 'none';
         this.resultContainer.querySelector('.download-section').style.display = 'none';
+        if (this.resultEmptyHint) this.resultEmptyHint.style.display = '';
         // 保证无图片时结果区高度为默认
         this.resultContainer.style.minHeight = '500px';
+        this.updateImageCount();
         this.updateOrientationToggleText();
         // 显示工作区提示文本
         this.showWorkspaceHint();
@@ -608,6 +680,11 @@ class SubtitleStitcher {
     processImages() {
         // 只处理工作区内所有图片，与选中图片无关
         if (!this.images || this.images.length === 0) return;
+
+        // 按钮进入处理中状态
+        const originalText = this.processBtn.textContent;
+        this.processBtn.textContent = '处理中...';
+        this.processBtn.disabled = true;
         // 有结果时移除最小高度
         this.resultContainer.style.minHeight = '';
 
@@ -663,8 +740,9 @@ class SubtitleStitcher {
 
         // 更新结果图片，只保留一张
         this.resultImage.src = canvas.toDataURL('image/jpeg', this.JPEG_QUALITY);
-        this.resultImage.style.display = 'block';  // 改为block确保显示
-        this.resultContainer.querySelector('.download-section').style.display = 'block';  // 改为block确保显示
+        this.resultImage.style.display = 'block';
+        this.resultContainer.querySelector('.download-section').style.display = 'block';
+        if (this.resultEmptyHint) this.resultEmptyHint.style.display = 'none';
 
         // 为结果图片添加拖拽支持
         this.resultImage.setAttribute('draggable', 'true');
@@ -672,6 +750,10 @@ class SubtitleStitcher {
             e.dataTransfer.setData('text/uri-list', this.resultImage.src);
             e.dataTransfer.setData('text/plain', this.resultImage.src);
         };
+
+        // 恢复按钮状态
+        this.processBtn.textContent = originalText;
+        this.processBtn.disabled = false;
     }
 
     downloadResult() {
