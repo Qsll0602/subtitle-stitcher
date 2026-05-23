@@ -10,25 +10,29 @@
 }
 
 body {
-    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', sans-serif;
+    font-size: 16px;
     background: linear-gradient(135deg, #e8edf5 0%, #f0f4fa 50%, #eceff6 100%);
     color: #1e293b;
     line-height: 1.6;
     min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    letter-spacing: -0.2px;
 }
 
 .container {
     max-width: 1800px;
     margin: 0 auto;
-    padding: 24px 40px;
+    padding: 28px 44px;
 }
 
 /* ----- 标题层级 ----- */
 h1 {
     text-align: center;
-    margin-bottom: 6px;
+    margin-bottom: 8px;
     color: #1a2332;
-    font-size: 32px;
+    font-size: 36px;
     font-weight: 700;
     letter-spacing: -0.5px;
 }
@@ -36,14 +40,14 @@ h1 {
 .container > p {
     text-align: center;
     color: #64748b;
-    margin-bottom: 24px;
-    font-size: 15px;
+    margin-bottom: 28px;
+    font-size: 16px;
 }
 
 h2 {
     margin: 20px 0 15px 0;
     color: #334155;
-    font-size: 20px;
+    font-size: 22px;
     font-weight: 600;
 }
 
@@ -78,8 +82,8 @@ h2 {
     align-items: center;
     justify-content: center;
     gap: 6px;
-    padding: 10px 22px;
-    font-size: 15px;
+    padding: 11px 24px;
+    font-size: 16px;
     font-family: inherit;
     font-weight: 600;
     border-radius: 10px;
@@ -88,7 +92,7 @@ h2 {
     border: none;
     outline: none;
     user-select: none;
-    letter-spacing: 0.3px;
+    letter-spacing: 0.1px;
     position: relative;
     overflow: hidden;
 }
@@ -212,8 +216,8 @@ h2 {
 .main-content {
     display: flex;
     flex-wrap: wrap;
-    gap: 28px;
-    margin-bottom: 24px;
+    gap: 32px;
+    margin-bottom: 28px;
     align-items: stretch;
 }
 
@@ -267,10 +271,90 @@ h2 {
 
 /* 图片计数标签 */
 .image-count {
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 400;
     color: #64748b;
     margin-left: 10px;
+}
+
+/* ============================================
+   裁剪数据面板（工作区左下角）
+   ============================================ */
+.crop-panel {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(6px);
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 14px 16px;
+    z-index: 30;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+    min-width: 150px;
+}
+
+.crop-panel-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+}
+
+.crop-panel-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 5px;
+    cursor: default;
+}
+
+.crop-panel-row:last-child {
+    margin-bottom: 0;
+}
+
+.crop-panel-row span {
+    font-size: 14px;
+    font-weight: 500;
+    color: #475569;
+    min-width: 28px;
+}
+
+.crop-panel-row span:last-child {
+    min-width: 16px;
+    color: #94a3b8;
+}
+
+.crop-panel-row input {
+    width: 56px;
+    height: 30px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    text-align: center;
+    font-size: 14px;
+    font-weight: 600;
+    font-family: inherit;
+    color: #1e293b;
+    background: #f8fafc;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.crop-panel-row input:focus {
+    border-color: #4a90d9;
+    box-shadow: 0 0 0 3px rgba(74, 144, 217, 0.12);
+    background: #fff;
+}
+
+/* 移动端面板适配 */
+@media (max-width: 768px) {
+    .crop-panel {
+        bottom: 12px;
+        left: 12px;
+        padding: 10px 12px;
+    }
 }
 
 /* 拖拽悬停状态 */
@@ -289,7 +373,7 @@ h2 {
     left: 50%;
     transform: translate(-50%, -50%);
     color: #94a3b8;
-    font-size: 16px;
+    font-size: 17px;
     text-align: center;
     pointer-events: none;
     user-select: none;
@@ -567,7 +651,7 @@ h2 {
     width: 100%;
     text-align: center;
     color: #94a3b8;
-    font-size: 15px;
+    font-size: 16px;
     padding: 60px 20px;
     pointer-events: none;
 }
@@ -600,7 +684,7 @@ h2 {
     .clear-all-btn,
     .orientation-toggle {
         padding: 10px 16px;
-        font-size: 14px;
+        font-size: 15px;
     }
 
     .main-content {

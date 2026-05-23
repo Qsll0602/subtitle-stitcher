@@ -1,5 +1,4 @@
 class SubtitleStitcher {
-    // 在构造函数或 init 里添加 resultImage 拖拽到 workspace 的处理
 
     // 将结果图片以原始比例添加回工作区
     addResultImageToWorkspace(dataUrl) {
@@ -58,80 +57,11 @@ class SubtitleStitcher {
         this.resultContainer.querySelector('.download-section').style.display = 'none';
         this.resultEmptyHint = this.resultContainer.querySelector('.result-empty-hint');
 
-        // 绑定事件
-        this.imageUpload.addEventListener('change', (e) => this.handleImageUpload(e));
-        this.processBtn.addEventListener('click', () => this.processImages());
-        this.clearAllBtn.addEventListener('click', () => this.clearAllImages());
-        this.downloadBtn.addEventListener('click', () => this.downloadResult());
-        this.orientationToggle.addEventListener('mousedown', e => e.preventDefault()); // 防止双击高亮
-        this.orientationToggle.addEventListener('click', () => this.toggleOrientation());
+        // 所有事件绑定
+        this._bindEvents();
 
-        // 初始化按钮文本
+        // 初始化 UI
         this.updateOrientationToggleText();
-
-        // 工作区拖拽上传支持
-        this.workspace.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            this.workspace.classList.add('dragover');
-            if (this.isDraggingFromOutside) {
-                e.dataTransfer.dropEffect = 'copy';
-            } else {
-                e.dataTransfer.dropEffect = 'move';
-            }
-        });
-
-        this.workspace.addEventListener('dragleave', (e) => {
-            const rect = this.workspace.getBoundingClientRect();
-            if (e.clientX < rect.left || e.clientX >= rect.right || e.clientY < rect.top || e.clientY >= rect.bottom) {
-                this.workspace.classList.remove('dragover');
-            }
-        });
-
-        this.workspace.addEventListener('dragenter', (e) => {
-            if (e.dataTransfer.types.includes('Files')) {
-                this.isDraggingFromOutside = true;
-            } else {
-                this.isDraggingFromOutside = false;
-            }
-        });
-
-        // 键盘粘贴支持
-        this.workspace.addEventListener('paste', (e) => this.handlePaste(e));
-        // 键盘删除支持（Delete / Backspace）
-        this.workspace.addEventListener('keydown', (e) => {
-            if ((e.key === 'Delete' || e.key === 'Backspace') && this.selectedImageIndex !== -1) {
-                e.preventDefault();
-                this.deleteImage(this.selectedImageIndex);
-            }
-        });
-
-        // 恢复结果图片拖回工作区支持
-        this.resultImage.setAttribute('draggable', 'true');
-        this.resultImage.ondragstart = (e) => {
-            // 传递自定义类型，标记为 resultImage 拖拽
-            e.dataTransfer.setData('application/x-stitch-result', this.resultImage.src);
-            e.dataTransfer.effectAllowed = 'copy';
-        };
-
-        // 工作区支持接收 resultImage 拖拽
-        this.workspace.addEventListener('drop', (e) => {
-            e.preventDefault();
-            this.workspace.classList.remove('dragover');
-            // 优先处理 resultImage 拖拽
-            if (e.dataTransfer.types.includes('application/x-stitch-result')) {
-                const dataUrl = e.dataTransfer.getData('application/x-stitch-result');
-                if (dataUrl) {
-                    this.addResultImageToWorkspace(dataUrl);
-                }
-                return;
-            }
-            if (e.dataTransfer.files.length) {
-                this.handleDroppedFiles(e.dataTransfer.files);
-            }
-            this.isDraggingFromOutside = false;
-        });
-
-        // 初始化时显示或隐藏工作区提示文本
         this.showWorkspaceHint();
 
         // 图片计数标签
@@ -146,6 +76,130 @@ class SubtitleStitcher {
         window.addEventListener('resize', () => {
             clearTimeout(this._resizeTimer);
             this._resizeTimer = setTimeout(() => this.refreshAllCropOverlays(), 150);
+        });
+
+        // 裁剪数据面板（工作区左下角）
+        this._buildCropPanel();
+    }
+
+    _bindEvents() {
+        // 按钮事件
+        this.imageUpload.addEventListener('change', (e) => this.handleImageUpload(e));
+        this.processBtn.addEventListener('click', () => this.processImages());
+        this.clearAllBtn.addEventListener('click', () => this.clearAllImages());
+        this.downloadBtn.addEventListener('click', () => this.downloadResult());
+        this.orientationToggle.addEventListener('mousedown', e => e.preventDefault());
+        this.orientationToggle.addEventListener('click', () => this.toggleOrientation());
+
+        // 工作区拖拽上传
+        this.workspace.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            this.workspace.classList.add('dragover');
+            e.dataTransfer.dropEffect = this.isDraggingFromOutside ? 'copy' : 'move';
+        });
+
+        this.workspace.addEventListener('dragleave', (e) => {
+            const rect = this.workspace.getBoundingClientRect();
+            if (e.clientX < rect.left || e.clientX >= rect.right || e.clientY < rect.top || e.clientY >= rect.bottom) {
+                this.workspace.classList.remove('dragover');
+            }
+        });
+
+        this.workspace.addEventListener('dragenter', (e) => {
+            this.isDraggingFromOutside = e.dataTransfer.types.includes('Files');
+        });
+
+        // 键盘：粘贴 + 删除
+        this.workspace.addEventListener('paste', (e) => this.handlePaste(e));
+        this.workspace.addEventListener('keydown', (e) => {
+            if (e.code === 'Delete' && this.selectedImageIndex !== -1) {
+                const active = document.activeElement;
+                if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return;
+                e.preventDefault();
+                this.deleteImage(this.selectedImageIndex);
+            }
+        });
+
+        // 结果图拖回工作区
+        this.resultImage.setAttribute('draggable', 'true');
+        this.resultImage.ondragstart = (e) => {
+            e.dataTransfer.setData('application/x-stitch-result', this.resultImage.src);
+            e.dataTransfer.effectAllowed = 'copy';
+        };
+
+        this.workspace.addEventListener('drop', (e) => {
+            e.preventDefault();
+            this.workspace.classList.remove('dragover');
+            if (e.dataTransfer.types.includes('application/x-stitch-result')) {
+                const dataUrl = e.dataTransfer.getData('application/x-stitch-result');
+                if (dataUrl) this.addResultImageToWorkspace(dataUrl);
+                return;
+            }
+            if (e.dataTransfer.files.length) {
+                this.handleDroppedFiles(e.dataTransfer.files);
+            }
+            this.isDraggingFromOutside = false;
+        });
+    }
+
+    _bindDragSortEvents(container, dragBlock) {
+        dragBlock.addEventListener('mousedown', (e) => {
+            if (!e.target.closest('.workspace-image')) {
+                dragBlock.draggable = true;
+            }
+        });
+        dragBlock.addEventListener('mouseup', () => {
+            dragBlock.draggable = false;
+        });
+        dragBlock.addEventListener('dragstart', (e) => {
+            this.draggedElement = container;
+            this.draggedIndex = parseInt(container.dataset.index);
+            this.draggedWasSelected = (this.selectedImageIndex === this.draggedIndex);
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', this.draggedIndex);
+            setTimeout(() => container.style.opacity = '0.5', 0);
+        });
+        dragBlock.addEventListener('dragend', () => {
+            this.draggedElement.style.opacity = '1';
+            this.draggedElement = null;
+            this.isDraggingFromOutside = false;
+            this.draggedIndex = null;
+        });
+        dragBlock.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            Array.from(this.workspaceImages.children).forEach(c => { c.style.boxShadow = ''; });
+            if (!this.isDraggingFromOutside && this.draggedElement && this.draggedElement !== container) {
+                const rect = dragBlock.getBoundingClientRect();
+                const midY = rect.top + rect.height / 2;
+                container.style.boxShadow = e.clientY < midY
+                    ? 'inset 0 3px 0 #4a90d9'
+                    : 'inset 0 -3px 0 #4a90d9';
+            }
+        });
+        dragBlock.addEventListener('dragleave', () => {
+            container.style.boxShadow = '';
+        });
+        dragBlock.addEventListener('drop', (e) => {
+            e.preventDefault();
+            container.style.boxShadow = '';
+            if (!this.isDraggingFromOutside && this.draggedElement && this.draggedIndex !== null) {
+                const targetIndex = parseInt(container.dataset.index);
+                if (this.draggedIndex !== targetIndex) {
+                    [this.images[this.draggedIndex], this.images[targetIndex]] =
+                    [this.images[targetIndex], this.images[this.draggedIndex]];
+                    this.refreshImageContainer(this.draggedIndex);
+                    this.refreshImageContainer(targetIndex);
+                    if (this.draggedWasSelected) {
+                        this.selectImage(targetIndex);
+                    } else if (this.selectedImageIndex === targetIndex) {
+                        this.selectImage(this.draggedIndex);
+                    }
+                }
+            }
+        });
+        dragBlock.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.selectImage(parseInt(container.dataset.index));
         });
     }
 
@@ -284,77 +338,8 @@ class SubtitleStitcher {
         // 隐藏工作区提示文本
         this.hideWorkspaceHint();
 
-        // 拖拽排序相关事件
-        dragBlock.addEventListener('mousedown', (e) => {
-            if (!e.target.closest('.workspace-image')) {
-                dragBlock.draggable = true;
-            }
-        });
-        dragBlock.addEventListener('mouseup', () => {
-            dragBlock.draggable = false;
-        });
-        dragBlock.addEventListener('dragstart', (e) => {
-            this.draggedElement = container;
-            this.draggedIndex = parseInt(container.dataset.index);
-            this.draggedWasSelected = (this.selectedImageIndex === this.draggedIndex);
-            e.dataTransfer.effectAllowed = 'move';
-            e.dataTransfer.setData('text/plain', this.draggedIndex);
-            setTimeout(() => container.style.opacity = '0.5', 0);
-        });
-        dragBlock.addEventListener('dragend', (e) => {
-            this.draggedElement.style.opacity = '1';
-            this.draggedElement = null;
-            this.isDraggingFromOutside = false;
-            this.draggedIndex = null;
-        });
-        dragBlock.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            // 清除所有容器的指示线
-            Array.from(this.workspaceImages.children).forEach(c => {
-                c.style.boxShadow = '';
-            });
-            if (!this.isDraggingFromOutside && this.draggedElement && this.draggedElement !== container) {
-                const rect = dragBlock.getBoundingClientRect();
-                const midY = rect.top + rect.height / 2;
-                container.style.boxShadow = e.clientY < midY
-                    ? 'inset 0 3px 0 #4a90d9'
-                    : 'inset 0 -3px 0 #4a90d9';
-            }
-        });
-        
-        dragBlock.addEventListener('dragleave', (e) => {
-            container.style.boxShadow = '';
-        });
-        
-        dragBlock.addEventListener('drop', (e) => {
-            e.preventDefault();
-            container.style.boxShadow = '';
-            
-            if (!this.isDraggingFromOutside && this.draggedElement && this.draggedIndex !== null) {
-                const targetIndex = parseInt(container.dataset.index);
-                if (this.draggedIndex !== targetIndex) {
-                    // 交换图片数据
-                    [this.images[this.draggedIndex], this.images[targetIndex]] = 
-                    [this.images[targetIndex], this.images[this.draggedIndex]];
-                    
-                    // 重新渲染两个容器
-                    this.refreshImageContainer(this.draggedIndex);
-                    this.refreshImageContainer(targetIndex);
-                    
-                    // 更新选中状态
-                    if (this.draggedWasSelected) {
-                        this.selectImage(targetIndex);
-                    } else if (this.selectedImageIndex === targetIndex) {
-                        this.selectImage(this.draggedIndex);
-                    }
-                }
-            }
-        });
-
-        dragBlock.addEventListener('click', (e) => {
-            e.stopPropagation();
-            this.selectImage(parseInt(container.dataset.index));
-        });
+        // 拖拽排序 + 点击选中
+        this._bindDragSortEvents(container, dragBlock);
 
         // 等图片布局完成后再创建裁剪覆盖层，避免 offsetWidth 为 0 导致横跳
         const initOverlay = () => {
@@ -393,6 +378,93 @@ class SubtitleStitcher {
         if (!this.imageCountLabel) return;
         const count = this.images.length;
         this.imageCountLabel.textContent = count > 0 ? count + ' 张图片' : '';
+    }
+
+    // ========== 裁剪数据面板 ==========
+
+    _buildCropPanel() {
+        const panel = document.createElement('div');
+        panel.className = 'crop-panel';
+        panel.style.display = 'none';
+
+        panel.innerHTML = `
+            <div class="crop-panel-title">裁剪数据</div>
+            <label class="crop-panel-row">
+                <span>起点</span>
+                <input type="text" inputmode="decimal" class="crop-input-pos" value="25">
+                <span>%</span>
+            </label>
+            <label class="crop-panel-row">
+                <span>终点</span>
+                <input type="text" inputmode="decimal" class="crop-input-end" value="75">
+                <span>%</span>
+            </label>
+        `;
+
+        this.workspace.appendChild(panel);
+        this.cropPanel = panel;
+        this.cropInputPos = panel.querySelector('.crop-input-pos');
+        this.cropInputEnd = panel.querySelector('.crop-input-end');
+
+        // 提交 → 审核 → 应用
+        const commit = () => {
+            if (this.selectedImageIndex === -1) return;
+            const imageObj = this.images[this.selectedImageIndex];
+            const oldPos = Math.round(imageObj.crop.position * 10) / 10;
+            const oldEnd = Math.round((imageObj.crop.position + imageObj.crop.size) * 10) / 10;
+
+            let start = parseFloat(this.cropInputPos.value);
+            let end = parseFloat(this.cropInputEnd.value);
+
+            // 审核：空值或非数字 → 还原
+            if (isNaN(start) || isNaN(end)) {
+                this.cropInputPos.value = oldPos;
+                this.cropInputEnd.value = oldEnd;
+                return;
+            }
+
+            // 审核：范围约束（起点 < 终点，在 0~100 内）
+            if (start < 0 || end > 100 || start >= end) {
+                this.cropInputPos.value = oldPos;
+                this.cropInputEnd.value = oldEnd;
+                return;
+            }
+
+            // 应用（保留 1 位小数）
+            start = Math.round(start * 10) / 10;
+            end   = Math.round(end * 10) / 10;
+            imageObj.crop.position = start;
+            imageObj.crop.size = end - start;
+
+            this.cropInputPos.value = start;
+            this.cropInputEnd.value = end;
+
+            const previewContainer = document.querySelector(`.workspace-image[data-index="${this.selectedImageIndex}"]`);
+            if (previewContainer) this.updateImageCropOverlay(previewContainer, imageObj);
+        };
+
+        const onEnter = (e) => { if (e.key === 'Enter') commit(); };
+
+        this.cropInputPos.addEventListener('change', commit);
+        this.cropInputEnd.addEventListener('change', commit);
+        this.cropInputPos.addEventListener('keydown', onEnter);
+        this.cropInputEnd.addEventListener('keydown', onEnter);
+    }
+
+    _updateCropPanel() {
+        if (!this.cropPanel || this.selectedImageIndex === -1) return;
+        const imageObj = this.images[this.selectedImageIndex];
+        if (!imageObj) return;
+        this.cropInputPos.value = Math.round(imageObj.crop.position * 10) / 10;
+        this.cropInputEnd.value = Math.round((imageObj.crop.position + imageObj.crop.size) * 10) / 10;
+    }
+
+    _showCropPanel() {
+        if (this.cropPanel) this.cropPanel.style.display = '';
+    }
+
+    _hideCropPanel() {
+        if (this.cropPanel) this.cropPanel.style.display = 'none';
     }
 
     // 刷新指定索引的容器内容
@@ -444,6 +516,8 @@ class SubtitleStitcher {
             this.orientation = imageObj.crop.orientation;
             this.updateOrientationToggleText();
         }
+        this._updateCropPanel();
+        this._showCropPanel();
     }
 
     updateImageCropOverlay(previewContainer, imageObj) {
@@ -587,6 +661,9 @@ class SubtitleStitcher {
             // 同步更新百分比标签
             const pct = overlay.querySelector('.crop-percent');
             if (pct) pct.textContent = Math.round(imageObj.crop.size) + '%';
+
+            // 同步更新裁剪数据面板
+            this._updateCropPanel();
         };
 
         const handleMouseUp = () => {
@@ -644,6 +721,7 @@ class SubtitleStitcher {
 
         if (this.images.length === 0) {
             this.selectedImageIndex = -1;
+            this._hideCropPanel();
             this.processBtn.disabled = true;
             this.clearAllBtn.disabled = true;
             this.resultImage.style.display = 'none';
@@ -664,6 +742,7 @@ class SubtitleStitcher {
         this.images = [];
         this.workspaceImages.innerHTML = '';
         this.selectedImageIndex = -1;
+        this._hideCropPanel();
         this.processBtn.disabled = true;
         this.clearAllBtn.disabled = true;
         this.resultImage.style.display = 'none';
